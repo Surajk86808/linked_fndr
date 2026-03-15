@@ -1,0 +1,32 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local tool metadata
+.zencoder/
+.zenflow/
+
+# Logs
+*.log
+
+# Runtime/generated project files
+leads.csv
+checkpoint.json
+seen_urls.txt
+scraper.log
+
+# Local config and secrets
+config.py
+.env
+.env.*
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
