@@ -17,10 +17,12 @@ ENV/
 *.log
 
 # Runtime/generated project files
+leads.xlsx
 leads.csv
 checkpoint.json
 seen_urls.txt
 scraper.log
+linkedin_cookies.json
 
 # Local config and secrets
 config.py

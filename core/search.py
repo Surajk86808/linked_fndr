@@ -23,15 +23,43 @@ from utils.seen_urls import SeenUrls
 
 _DEBUG_CAPTURED = False
 
+# Build flat geoUrn map from discovered locations in config.GEO_LOCATIONS.
+# Falls back to hardcoded country-level IDs when geoUrns.json not found.
+_COUNTRY_URNS = {
+    "India":          "103644278",
+    "United States":  "103644286",
+    "United Kingdom": "101165590",
+    "Japan":          "101355337",
+    "Germany":        "101282230",
+    "Australia":      "101452733",
+    "Canada":         "101174742",
+    "Singapore":      "102454443",
+    "UAE":            "104305776",
+    "Brazil":         "106057199",
+}
 
-def _build_url(keyword: str, page: int = 1) -> str:
+GEO_URN_MAP: dict = {}
+if config.GEO_LOCATIONS:
+    for _country_data in config.GEO_LOCATIONS.values():
+        for _city_locs in _country_data.values():
+            for _loc in _city_locs:
+                GEO_URN_MAP[_loc["name"]] = _loc["geoUrn"]
+else:
+    GEO_URN_MAP = dict(_COUNTRY_URNS)
+
+
+def _build_url(keyword: str, page: int = 1, geo_urn: str = None) -> str:
     kw = quote(keyword)
-    return (
+    url = (
         f"https://www.linkedin.com/search/results/people/"
         f"?keywords={kw}"
-        f"&origin=GLOBAL_SEARCH_HEADER"
+        f"&origin=FACETED_SEARCH"
+        f"&spellCorrectionEnabled=true"
         f"&page={page}"
     )
+    if geo_urn:
+        url += f"&geoUrn=%5B%22{geo_urn}%22%5D"
+    return url
 
 
 def _extract_urls_from_page(driver: webdriver.Chrome) -> list[str]:
@@ -162,14 +190,21 @@ def _wait_for_search_page(driver: webdriver.Chrome, page: int) -> bool:
         return False
 
 
-def search_profiles(driver: webdriver.Chrome, keyword: str, seen: SeenUrls) -> list[str]:
-    """Search LinkedIn for a keyword and collect up to MAX_PER_KEYWORD unseen profile URLs."""
-    log(f"Searching: '{keyword}'", "SCRAPE")
+def search_profiles(
+    driver: webdriver.Chrome,
+    keyword: str,
+    seen: SeenUrls,
+    geo_urn: str = None,
+    location_label: str = None,
+) -> list[str]:
+    """Search LinkedIn for a keyword with optional city-level geoUrn filtering."""
+    label = f"'{keyword}'" + (f" | {location_label or geo_urn}" if (location_label or geo_urn) else "")
+    log(f"Searching: {label}", "SCRAPE")
     collected = []
     page = 1
 
-    while len(collected) < config.MAX_PER_KEYWORD:
-        url = _build_url(keyword, page)
+    while True:
+        url = _build_url(keyword, page, geo_urn)
         try:
             driver.get(url)
             delay_page_load()
@@ -199,15 +234,11 @@ def search_profiles(driver: webdriver.Chrome, keyword: str, seen: SeenUrls) -> l
             if profile_url not in collected and not seen.seen(profile_url):
                 collected.append(profile_url)
                 new_count += 1
-            if len(collected) >= config.MAX_PER_KEYWORD:
-                break
 
         log(f"  Page {page}: +{new_count} new profiles  ({len(collected)} total)")
 
-        if len(collected) >= config.MAX_PER_KEYWORD:
-            break
         if not _has_next_page(driver):
-            log(f"  No more pages for '{keyword}'.")
+            log(f"  No more pages for {label}.")
             break
 
         if random.random() < 0.08:
@@ -217,8 +248,8 @@ def search_profiles(driver: webdriver.Chrome, keyword: str, seen: SeenUrls) -> l
             page += 1
 
         if not _click_next(driver):
-            log(f"  Pagination unavailable for '{keyword}'.", "INFO")
+            log(f"  Pagination unavailable for {label}.", "INFO")
             break
 
-    log(f"Collected {len(collected)} profiles for '{keyword}'", "OK")
-    return collected[:config.MAX_PER_KEYWORD]
+    log(f"Collected {len(collected)} profiles for {label}", "OK")
+    return collected

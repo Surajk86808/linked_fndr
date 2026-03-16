@@ -1,4 +1,4 @@
-# core/login.py  -  LinkedIn login with CAPTCHA / verification handling
+# core/login.py  -  LinkedIn login with cookie session + credential fallback
 
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
@@ -10,26 +10,41 @@ from selenium.webdriver.support.ui import WebDriverWait
 import config
 from utils.human import delay_after_login, human_type, short_pause
 from utils.logger import log
+from utils.session import cookies_exist, load_cookies, save_cookies
 
 LOGIN_URL = "https://www.linkedin.com/login?trk=guest_homepage-basic_nav-header-signin"
 
 
 def login(driver: webdriver.Chrome) -> bool:
     """
-    Log into LinkedIn.
-
-    Returns True on success, False on failure.
-    Handles:
-      - Normal login flow
-      - Email verification / CAPTCHA - pauses and lets user solve manually
-      - Already-logged-in sessions (skips re-login)
+    Try cookie login first. Falls back to credential login if cookies
+    are missing or expired. Saves fresh cookies after every credential login.
     """
-    log("Navigating to LinkedIn login page...")
+    log("Navigating to LinkedIn...")
+    driver.get("https://www.linkedin.com")
+    delay_after_login()
+
+    # --- Step 1: Try cookie login ---
+    if cookies_exist():
+        log("Found saved session — attempting cookie login...", "INFO")
+        load_cookies(driver)
+        driver.get("https://www.linkedin.com/feed")
+        delay_after_login()
+
+        if _is_logged_in(driver):
+            log("Cookie login successful — skipping credentials.", "OK")
+            return True
+        else:
+            log("Cookies expired or invalid — falling back to credential login.", "WARN")
+
+    # --- Step 2: Credential login ---
+    log("Logging in with credentials...")
     driver.get(LOGIN_URL)
     delay_after_login()
 
     if _is_logged_in(driver):
-        log("Already logged in - skipping login step.", "OK")
+        log("Already logged in.", "OK")
+        save_cookies(driver)
         return True
 
     wait = WebDriverWait(driver, 20)
@@ -61,17 +76,19 @@ def login(driver: webdriver.Chrome) -> bool:
         )
 
         log("Login successful!", "OK")
+        save_cookies(driver)
         return True
 
     except TimeoutException:
-        log("Login timed out. Browser may be stuck.", "ERROR")
-        log("Press ENTER to try continuing anyway, or Ctrl+C to abort...")
-        input()
-        return _is_logged_in(driver)
+        log("Login timed out.", "ERROR")
+        input("Press ENTER to try continuing anyway, or Ctrl+C to abort...")
+        if _is_logged_in(driver):
+            save_cookies(driver)
+            return True
+        return False
 
 
 def _is_logged_in(driver: webdriver.Chrome) -> bool:
-    """Check if the session already has a valid LinkedIn login."""
     try:
         driver.find_element(By.CSS_SELECTOR, "div.feed-identity-module")
         return True

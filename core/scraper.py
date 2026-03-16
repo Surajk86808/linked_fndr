@@ -41,6 +41,7 @@ class Lead:
     priority: str = ""
     scraped_date: str = ""
     keyword_matched: str = ""
+    country: str = ""
 
 
 def _safe_text(driver, by, sel, default="") -> str:
@@ -229,6 +230,7 @@ def scrape_profile(
     driver: webdriver.Chrome,
     url: str,
     keyword: str,
+    country: str = "",
 ) -> Optional[Lead]:
     log(f"  {url.split('/in/')[-1][:40]}", "SCRAPE")
     driver.get(url)
@@ -241,6 +243,7 @@ def scrape_profile(
         linkedin_url=url,
         scraped_date=datetime.now().strftime("%Y-%m-%d"),
         keyword_matched=keyword,
+        country=country,
     )
 
     _scrape_basic(driver, lead)
